@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import rateLimit from 'express-rate-limit'
 import prisma from '../lib/prisma'
 import { authMiddleware, AuthRequest } from '../middlewares/auth'
 import { validate } from '../middlewares/validate'
@@ -6,6 +7,17 @@ import { clienteCreateSchema, clienteUpdateSchema } from '../schemas/validation'
 import { logger } from '../lib/logger'
 
 const router = Router()
+// Limita las lecturas individuales por id (por IP) para frenar la
+// enumeración automatizada de :id (IDOR, ver PoC3): sin este límite, una
+// cuenta válida puede recorrer secuencialmente toda la tabla de clientes
+// y extraer su PII sin disparar ninguna alerta.
+const lecturaIndividualLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Intente de nuevo en un minuto.' },
+})
 
 // GET /api/clientes — protegido
 router.get('/', authMiddleware, async (_req, res, next) => {
@@ -87,7 +99,7 @@ router.get('/en-mora', authMiddleware, async (_req, res, next) => {
 })
 
 // GET /api/clientes/:id — protegido
-router.get('/:id', authMiddleware, async (req, res, next) => {
+router.get('/:id', authMiddleware, lecturaIndividualLimiter, async (req, res, next) => {
   try {
     const cliente = await prisma.clientes.findUnique({
       where: { id: Number(req.params.id) },
