@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import prisma from '../lib/prisma'
-import { authMiddleware, AuthRequest } from '../middlewares/auth'
+import { authMiddleware, AuthRequest, requireRole } from '../middlewares/auth'
 import { validate } from '../middlewares/validate'
 import { clienteCreateSchema, clienteUpdateSchema } from '../schemas/validation'
 import { logger } from '../lib/logger'
@@ -132,8 +132,9 @@ router.put('/:id', authMiddleware, validate(clienteUpdateSchema), async (req: Au
   }
 })
 
-// DELETE /api/clientes/:id — protegido
-router.delete('/:id', authMiddleware, async (req: AuthRequest, res, next) => {
+
+// DELETE /api/clientes/:id — protegido, solo admin (ver PoC1: Falta de Autorización)
+router.delete('/:id', authMiddleware, requireRole('admin'), async (req: AuthRequest, res, next) => {
   try {
     await prisma.clientes.delete({
       where: { id: Number(req.params.id) }

@@ -82,6 +82,10 @@ model usuarios {
   nombre        String      @db.VarChar(150)
   email         String      @unique @db.VarChar(150)
   password_hash String      @db.VarChar(255)
+  // Rol de autorización. Por defecto "cajero" (menor privilegio): las
+  // operaciones irreversibles del sistema (p. ej. borrar clientes) exigen
+  // "admin" explícitamente. Ver PoC1 (Falta de Autorización, Fase 2/3).
+  rol           String      @default("cajero") @db.VarChar(20)
   facturas      facturas[]
   auditoria     auditoria[]
 }

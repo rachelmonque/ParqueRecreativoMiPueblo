@@ -21,10 +21,15 @@ const loginLimiter = rateLimit({
 // POST /api/auth/register — protegido: solo un usuario autenticado (admin) puede
 // crear cuentas nuevas. No hay registro público.
 router.post('/register', authMiddleware, async (req: AuthRequest, res) => {
-  const { nombre, email, password } = req.body
+  const { nombre, email, password, rol } = req.body
 
   if (!nombre || !email || !password) {
     res.status(400).json({ error: 'nombre, email y password son requeridos' })
+    return
+  }
+
+  if (rol !== undefined && rol !== 'admin' && rol !== 'cajero') {
+    res.status(400).json({ error: "rol debe ser 'admin' o 'cajero'" })
     return
   }
 
@@ -37,7 +42,8 @@ router.post('/register', authMiddleware, async (req: AuthRequest, res) => {
   const password_hash = await bcrypt.hash(password, 10)
 
   const usuario = await prisma.usuarios.create({
-    data: { nombre, email, password_hash },
+    // Sin rol explícito, la cuenta nace "cajero" (menor privilegio por defecto).
+    data: { nombre, email, password_hash, rol: rol ?? 'cajero' },
     omit: { password_hash: true }
   })
 
@@ -69,13 +75,13 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
 
   const token = jwt.sign(
-    { id: usuario.id, email: usuario.email },
+    { id: usuario.id, email: usuario.email, rol: usuario.rol },
     env.JWT_SECRET,
     { expiresIn: '8h' }
   )
 
-  logger.info({ usuarioId: usuario.id, email: usuario.email }, 'Login exitoso')
-  res.json({ token, usuario: { id: usuario.id, nombre: usuario.nombre, email: usuario.email } })
+  logger.info({ usuarioId: usuario.id, email: usuario.email, rol: usuario.rol }, 'Login exitoso')
+  res.json({ token, usuario: { id: usuario.id, nombre: usuario.nombre, email: usuario.email, rol: usuario.rol } })
 })
 
 export default router
