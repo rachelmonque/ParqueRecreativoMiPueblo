@@ -1,5 +1,5 @@
 import { z } from 'zod'
-
+import DOMPurify from 'isomorphic-dompurify'
 // Máximo representable en Decimal(10,2)
 const DEC_MAX = 99_999_999.99
 
@@ -7,6 +7,19 @@ const DEC_MAX = 99_999_999.99
 const fechaISO = z
   .string()
   .refine((s) => /^\d{4}-\d{2}-\d{2}/.test(s) && !Number.isNaN(Date.parse(s)), 'Fecha inválida')
+
+  // Texto libre sanitizado: elimina cualquier etiqueta HTML (incluye <script>,
+// <img onerror=...>, etc.) antes de que el dato llegue a persistirse. Se hace
+// en el origen para que la protección no dependa de que cada consumidor de
+// la API (SPA oficial, dashboards externos, integraciones futuras) escape
+// correctamente por su cuenta (defensa en profundidad). Ver PoC2 (XSS Stored
+// vía API sin sanitizar, Fase 2).
+const textoLibreSanitizado = (maxLen: number) =>
+  z
+    .string()
+    .max(maxLen)
+    .nullish()
+    .transform((v) => (v ? DOMPurify.sanitize(v, { ALLOWED_TAGS: [] }) : v))
 
 // ---------- Categorías ----------
 export const categoriaCreateSchema = z.object({
@@ -24,7 +37,7 @@ export const clienteCreateSchema = z.object({
   cedula: z.string().trim().max(30).nullish().transform((v) => v || null),
   telefono: z.string().max(30).nullish(),
   fecha_inicio: fechaISO,
-  observaciones: z.string().max(2000).nullish(),
+  observaciones: textoLibreSanitizado(2000),
   estado: z.enum(['activo', 'inactivo']).default('activo'),
 })
 export const clienteUpdateSchema = clienteCreateSchema.partial()
