@@ -7,6 +7,7 @@ import { clienteCreateSchema, clienteUpdateSchema } from '../schemas/validation'
 import { logger } from '../lib/logger'
 
 const router = Router()
+
 // Limita las lecturas individuales por id (por IP) para frenar la
 // enumeración automatizada de :id (IDOR, ver PoC3): sin este límite, una
 // cuenta válida puede recorrer secuencialmente toda la tabla de clientes
@@ -19,8 +20,26 @@ const lecturaIndividualLimiter = rateLimit({
   message: { error: 'Demasiadas solicitudes. Intente de nuevo en un minuto.' },
 })
 
-// GET /api/clientes — protegido
-router.get('/', authMiddleware, async (_req, res, next) => {
+// Limita el listado completo (por IP): sin esto, una sola llamada a GET /
+// devuelve la tabla entera de clientes de una vez, lo que vuelve casi
+// decorativo el límite de lectura individual de arriba (ver PoC3). Más
+// estricto que el de lectura individual porque cada petición aquí expone
+// muchos registros a la vez, no uno solo. No se agrega paginación real
+// (cambiaría la forma de la respuesta y rompería ClientesPage/FacturasPage,
+// que esperan el array completo tal como está hoy) — el control aquí es
+// solo de frecuencia, no de forma.
+const listadoLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Intente de nuevo en un minuto.' },
+})
+
+// GET /api/clientes — protegido, con límite de tasa (ver PoC3): antes, sin
+// ningún freno, una sola cuenta podía repetir esta llamada sin límite y
+// automatizar la extracción masiva de PII en bloques completos.
+router.get('/', authMiddleware, listadoLimiter, async (_req, res, next) => {
   try {
     const clientes = await prisma.clientes.findMany({
       orderBy: { nombre: 'asc' }
