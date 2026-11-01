@@ -117,9 +117,17 @@ router.post('/', authMiddleware, validate(clienteCreateSchema), async (req: Auth
   }
 })
 
-// PUT /api/clientes/:id — protegido
+// PUT /api/clientes/:id — protegido. Cambiar el estado (activar/desactivar un
+// cliente) exige admin; el resto de campos (teléfono, observaciones, etc.)
+// los puede editar cualquier empleado autenticado, como siempre (ver PoC1:
+// la evidencia de Fase 2 mostró justo este caso —cambiar estado sin control
+// de rol— como parte de la falta de autorización, junto con DELETE).
 router.put('/:id', authMiddleware, validate(clienteUpdateSchema), async (req: AuthRequest, res, next) => {
   try {
+    if ('estado' in req.body && req.usuarioRol !== 'admin') {
+      res.status(403).json({ error: 'No tiene permisos para cambiar el estado de un cliente' })
+      return
+    }
     const { fecha_inicio, ...resto } = req.body
     const cliente = await prisma.clientes.update({
       where: { id: Number(req.params.id) },
